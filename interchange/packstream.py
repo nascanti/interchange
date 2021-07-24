@@ -26,7 +26,7 @@ from struct import pack as struct_pack, unpack as struct_unpack
 from pytz import FixedOffset, timezone, utc
 from six import PY2, binary_type, integer_types, text_type
 
-from interchange.space import Point
+from interchange.geo import Point
 from interchange.time import Duration, Date, Time, DateTime
 
 

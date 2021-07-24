@@ -17,7 +17,7 @@
 
 
 """
-This module defines spatial data types.
+This module defines geospatial data types.
 """
 
 
@@ -48,7 +48,7 @@ class Point(tuple):
     def __new__(cls, iterable):
         return tuple.__new__(cls, iterable)
 
-    def __repr__(self):
+    def __str__(self):
         return "POINT(%s)" % " ".join(map(str, self))
 
     def __eq__(self, other):

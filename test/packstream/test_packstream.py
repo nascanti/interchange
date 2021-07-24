@@ -27,8 +27,8 @@ from pytest import mark, raises
 from pytz import utc, FixedOffset
 from six import text_type
 
+from interchange.geo import CartesianPoint, WGS84Point, Point
 from interchange.packstream import UnpackStream, pack_into, pack
-from interchange.space import CartesianPoint, WGS84Point, Point
 from interchange.time import Date, Time, DateTime, Duration
 
 
