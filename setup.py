@@ -31,7 +31,7 @@ def get_readme():
 
 setup(
     name="interchange",
-    version="2021.0.dev1",
+    version="2021.0.0",
     description="Data types and interchange formats",
     author="Nigel Small",
     author_email="technige@py2neo.org",
