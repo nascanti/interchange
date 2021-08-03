@@ -80,31 +80,23 @@ class PropertyDict(dict):
 
     .. describe:: d == other
 
-        Return ``True`` if ``d`` is equal to ``other`` after all ``None`` values have been removed from ``other``.
+        Return ``True`` if ``d`` is equal to ``other`` after all
+        ``None`` values have been removed from ``other``.
 
     .. describe:: properties != other
 
-        Return ``True`` if ``d`` is unequal to ``other`` after all ``None`` values have been removed from ``other``.
+        Return ``True`` if ``d`` is unequal to ``other`` after all
+        ``None`` values have been removed from ``other``.
 
     .. describe:: d[key]
 
-        Return the value of *d* with key *key* or ``None`` if the key is missing.
+        Return the value of *d* with key *key* or ``None`` if the key
+        is missing.
 
     .. describe:: d[key] = value
 
-        Set the value of *d* with key *key* to *value* or remove the item if *value* is ``None``.
-
-    .. method:: setdefault(key, default=None)
-
-        If *key* is in the PropertyDict, return its value.
-        If not, insert *key* with a value of *default* and return *default* unless *default* is ``None``, in which case do nothing.
-        The value of *default* defaults to ``None``.
-
-    .. method:: update(iterable=None, **kwargs)
-
-        Update the PropertyDict with the key-value pairs from *iterable* followed by the keyword arguments from *kwargs*.
-        Individual properties already in the PropertyDict will be overwritten by those in *iterable* and subsequently by those in *kwargs* if the keys match.
-        Any value of ``None`` will effectively delete the property with that key, should it exist.
+        Set the value of *d* with key *key* to *value* or remove the
+        item if *value* is ``None``.
 
     """
 
@@ -131,6 +123,16 @@ class PropertyDict(dict):
             dict.__setitem__(self, key, value)
 
     def setdefault(self, key, default=None):
+        """ If *key* is in the PropertyDict, return its value. If not,
+        insert *key* with a value of *default* and return *default*
+        unless *default* is ``None``, in which case do nothing.
+
+        The value of *default* defaults to ``None``.
+
+        :param key:
+        :param default:
+        :return:
+        """
         if key in self:
             value = self[key]
         elif default is None:
@@ -140,6 +142,17 @@ class PropertyDict(dict):
         return value
 
     def update(self, iterable=None, **kwargs):
+        """ Update the PropertyDict with the key-value pairs from
+        *iterable* followed by the keyword arguments from *kwargs*.
+        Individual properties already in the PropertyDict will be
+        overwritten by those in *iterable* and subsequently by those
+        in *kwargs* if the keys match. Any value of ``None`` will
+        effectively delete the property with that key, should it exist.
+
+        :param iterable:
+        :param kwargs:
+        :return:
+        """
         for key, value in dict(iterable or {}, **kwargs).items():
             self[key] = value
 
@@ -158,13 +171,15 @@ class KeyValueList(list):
     This creates a list of values that have both an associated key and a
     positional index:
 
-     index | key | value
-    -------+-----+--------
-     0     | 'a' | 1
-     1     | 'c' | 7
-     2     | 'c' | 1
-     3     | 'b' | [8, 9]
-     4     | 'c' | 'b'
+    =====  ===  ======
+    index  key  value
+    =====  ===  ======
+     0     'a'  1
+     1     'c'  7
+     2     'c'  1
+     3     'b'  [8, 9]
+     4     'c'  'b'
+    =====  ===  ======
 
     """
 
