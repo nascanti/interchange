@@ -3,6 +3,7 @@ branch = False
 source =
     interchange
 omit =
+    docs/*
     test/*
     */site-packages/*
     */dist-packages/*
