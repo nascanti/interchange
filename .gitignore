@@ -62,4 +62,5 @@ venv
 .vscode
 
 # Profile output
+.benchmarks
 *.prof

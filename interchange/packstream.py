@@ -282,7 +282,7 @@ class UnpackStream(object):
 
     def __init__(self, data, offset=0):
         if PY2:
-            self._data = bytearray(data)
+            self._data = bytearray(data)  # FIXME
         else:
             self._data = data
         self._offset = offset
@@ -550,3 +550,12 @@ class UnpackStream(object):
         r, = struct_unpack(">d", self._data[self._offset:q])
         self._offset = q
         return r
+
+
+def unpack(data, offset=0):
+    s = UnpackStream(data, offset)
+    while True:
+        try:
+            yield s.unpack()
+        except IndexError:
+            break
