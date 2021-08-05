@@ -622,8 +622,8 @@ class Unpacker(object):
         return r
 
 
-def pack(*values, version=()):
-    packer = Packer(version=version)
+def pack(*values, **kwargs):
+    packer = Packer(**kwargs)
     for value in values:
         packer.pack(value)
     return packer.packed()
