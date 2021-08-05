@@ -277,10 +277,14 @@ class Packer(object):
         else:
             raise ValueError("Dictionary too large")
         for key, item in value.items():
-            if type(key) is not self.text_type:
+            t = type(key)
+            if t is self.text_type:
+                self._pack_unicode(key)
+            elif t is bytes:
+                self._pack_utf8(key)
+            else:
                 raise TypeError("Dictionary keys must be "
-                                "of type %r" % self.text_type)
-            self._pack_unicode(key)
+                                "of type %r or bytes" % self.text_type)
             self.pack(item)
 
     def _pack_bytearray(self, value):
