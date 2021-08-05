@@ -16,7 +16,7 @@
 # limitations under the License.
 
 
-from __future__ import division
+from __future__ import absolute_import, division
 
 from codecs import decode
 from collections import OrderedDict
@@ -29,6 +29,7 @@ import six
 
 from interchange.geo import Point
 from interchange.time import Duration, Date, Time, DateTime, UnixEpoch
+
 
 INT_DATA = {}
 for n in range(-0x8000, 0x8000):
