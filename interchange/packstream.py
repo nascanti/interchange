@@ -28,8 +28,7 @@ from pytz import FixedOffset, timezone, utc
 import six
 
 from interchange.geo import Point
-from interchange.time import Duration, Date, Time, DateTime
-
+from interchange.time import Duration, Date, Time, DateTime, UnixEpoch
 
 INT_DATA = {}
 for n in range(-0x8000, 0x8000):
@@ -64,15 +63,7 @@ INT64_MIN = -(2 ** 63)
 INT64_MAX = 2 ** 63
 
 
-UNIX_EPOCH_DATE_ORDINAL = Date(1970, 1, 1).to_ordinal()
-
-
-def seconds_and_nanoseconds(dt):
-    if isinstance(dt, datetime):
-        dt = DateTime.from_native(dt)
-    zone_epoch = DateTime(1970, 1, 1, tzinfo=dt.tzinfo)
-    t = dt.to_clock_time() - zone_epoch.to_clock_time()
-    return t.seconds, t.nanoseconds
+UNIX_EPOCH_DATE_ORDINAL = UnixEpoch.to_ordinal()
 
 
 class Structure(object):
@@ -172,7 +163,9 @@ class Packer(object):
         # datetime.date class, so this needs to be listed first
         # to avoid objects being encoded incorrectly.
         #
-        elif isinstance(value, (datetime, DateTime)):
+        elif isinstance(value, datetime):
+            self._pack_datetime(DateTime.from_native(value))
+        elif isinstance(value, DateTime):
             self._pack_datetime(value)
 
         # Date
@@ -320,21 +313,22 @@ class Packer(object):
         tz = dt.tzinfo
         if tz is None:
             # without time zone
-            local_dt = utc.localize(dt)
-            seconds, nanoseconds = seconds_and_nanoseconds(local_dt)
+            seconds, nanoseconds = utc.localize(dt).to_clock_time() - UnixEpoch.to_clock_time()
             self._write(b"\xB2d")
             self._pack_integer(seconds)
             self._pack_integer(nanoseconds)
         elif hasattr(tz, "zone") and tz.zone:
             # with named time zone
-            seconds, nanoseconds = seconds_and_nanoseconds(dt)
+            zone_epoch = DateTime(1970, 1, 1, tzinfo=dt.tzinfo)
+            seconds, nanoseconds = dt.to_clock_time() - zone_epoch.to_clock_time()
             self._write(b"\xB3f")
             self._pack_integer(seconds)
             self._pack_integer(nanoseconds)
             self.pack(tz.zone)
         else:
             # with time offset
-            seconds, nanoseconds = seconds_and_nanoseconds(dt)
+            zone_epoch = DateTime(1970, 1, 1, tzinfo=dt.tzinfo)
+            seconds, nanoseconds = dt.to_clock_time() - zone_epoch.to_clock_time()
             self._write(b"\xB3F")
             self._pack_integer(seconds)
             self._pack_integer(nanoseconds)
