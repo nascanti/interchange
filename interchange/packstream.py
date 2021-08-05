@@ -19,19 +19,38 @@
 from __future__ import division
 
 from codecs import decode
+from collections import OrderedDict
 from datetime import date, time, datetime, timedelta
 from io import BytesIO
 from struct import pack as struct_pack, unpack as struct_unpack
 
 from pytz import FixedOffset, timezone, utc
-from six import PY2, binary_type, integer_types, text_type
+import six
 
 from interchange.geo import Point
 from interchange.time import Duration, Date, Time, DateTime
 
 
-PACKED_UINT_8 = [struct_pack(">B", value) for value in range(0x100)]
-PACKED_UINT_16 = [struct_pack(">H", value) for value in range(0x10000)]
+INT_DATA = {}
+for n in range(-0x8000, 0x8000):
+    if -0x10 <= n < 0x80:
+        INT_DATA[n] = struct_pack(">b", n)
+    elif -0x80 <= n < -0x10:
+        INT_DATA[n] = b"\xC8" + struct_pack(">b", n)
+    else:
+        INT_DATA[n] = b"\xC9" + struct_pack(">h", n)
+
+BYTES_S_HEAD = [b"\xCC" + struct_pack(">B", value) for value in range(0x100)]
+BYTES_M_HEAD = [b"\xCD" + struct_pack(">H", value) for value in range(0x10000)]
+
+STR_S_HEAD = [b"\xD0" + struct_pack(">B", value) for value in range(0x100)]
+STR_M_HEAD = [b"\xD1" + struct_pack(">H", value) for value in range(0x10000)]
+
+LIST_S_HEAD = [b"\xD4" + struct_pack(">B", value) for value in range(0x100)]
+LIST_M_HEAD = [b"\xD5" + struct_pack(">H", value) for value in range(0x10000)]
+
+DICT_S_HEAD = [b"\xD8" + struct_pack(">B", value) for value in range(0x100)]
+DICT_M_HEAD = [b"\xD9" + struct_pack(">H", value) for value in range(0x10000)]
 
 UNPACKED_UINT_8 = {bytes(bytearray([x])): x for x in range(0x100)}
 UNPACKED_UINT_16 = {struct_pack(">H", x): x for x in range(0x10000)}
@@ -46,6 +65,14 @@ INT64_MAX = 2 ** 63
 
 
 UNIX_EPOCH_DATE_ORDINAL = Date(1970, 1, 1).to_ordinal()
+
+
+def seconds_and_nanoseconds(dt):
+    if isinstance(dt, datetime):
+        dt = DateTime.from_native(dt)
+    zone_epoch = DateTime(1970, 1, 1, tzinfo=dt.tzinfo)
+    t = dt.to_clock_time() - zone_epoch.to_clock_time()
+    return t.seconds, t.nanoseconds
 
 
 class Structure(object):
@@ -76,156 +103,68 @@ class Structure(object):
         self.fields[key] = value
 
 
-def pack_into(buffer, *values, **kwargs):
-    """ Pack values into a buffer.
+class Packer(object):
 
-    :param buffer:
-    :param values:
-    :param kwargs:
-    :return:
-    """
+    integer_types = six.integer_types
+    text_type = six.text_type
+    bytearray_type = bytearray
+    list_type = list
+    dict_type = dict
 
-    version = kwargs.get("version", ())
+    def __init__(self, version=()):
+        self._buffer = BytesIO()
+        self._write = self._buffer.write
+        self.version = version
 
-    unix_epoch_date = Date(1970, 1, 1)
+    def packed(self):
+        return self._buffer.getvalue()
 
-    write_bytes = buffer.write
+    def pack(self, value):
+        t = type(value)
 
-    def write_header(size, tiny, small=None, medium=None, large=None):
-        if 0x0 <= size <= 0xF and tiny is not None:
-            write_bytes(bytearray([tiny + size]))
-        elif size < 0x100 and small is not None:
-            write_bytes(bytearray([small]))
-            write_bytes(PACKED_UINT_8[size])
-        elif size < 0x10000 and medium is not None:
-            write_bytes(bytearray([medium]))
-            write_bytes(PACKED_UINT_16[size])
-        elif size < 0x100000000 and large is not None:
-            write_bytes(bytearray([large]))
-            write_bytes(struct_pack(">I", size))
-        else:
-            raise ValueError("Collection too large")
+        # String (Unicode)
+        if t is self.text_type:
+            self._pack_unicode(value)
 
-    def write_time(t):
-        try:
-            nanoseconds = int(t.ticks * 1000000000)
-        except AttributeError:
-            nanoseconds = (3600000000000 * t.hour + 60000000000 * t.minute +
-                           1000000000 * t.second + 1000 * t.microsecond)
-        if t.tzinfo:
-            write_bytes(b"\xB2T")
-            pack_into(buffer, nanoseconds, t.tzinfo.utcoffset(t).seconds)
-        else:
-            write_bytes(b"\xB1t")
-            pack_into(buffer, nanoseconds)
+        # List
+        elif t is self.list_type or t is tuple:
+            self._pack_list(value)
 
-    def seconds_and_nanoseconds(dt):
-        if isinstance(dt, datetime):
-            dt = DateTime.from_native(dt)
-        zone_epoch = DateTime(1970, 1, 1, tzinfo=dt.tzinfo)
-        t = dt.to_clock_time() - zone_epoch.to_clock_time()
-        return t.seconds, t.nanoseconds
+        # Integer
+        elif t in self.integer_types:
+            self._pack_integer(value)
 
-    def write_datetime(dt):
-        tz = dt.tzinfo
-        if tz is None:
-            # without time zone
-            local_dt = utc.localize(dt)
-            seconds, nanoseconds = seconds_and_nanoseconds(local_dt)
-            write_bytes(b"\xB2d")
-            pack_into(buffer, seconds, nanoseconds)
-        elif hasattr(tz, "zone") and tz.zone:
-            # with named time zone
-            seconds, nanoseconds = seconds_and_nanoseconds(dt)
-            write_bytes(b"\xB3f")
-            pack_into(buffer, seconds, nanoseconds, tz.zone)
-        else:
-            # with time offset
-            seconds, nanoseconds = seconds_and_nanoseconds(dt)
-            write_bytes(b"\xB3F")
-            pack_into(buffer, seconds, nanoseconds, tz.utcoffset(dt).seconds)
-
-    def write_point(p):
-        dim = len(p)
-        write_bytes(bytearray([0xB1 + dim]))
-        if dim == 2:
-            write_bytes(b"X")
-        elif dim == 3:
-            write_bytes(b"Y")
-        else:
-            raise ValueError("Cannot dehydrate Point with %d dimensions" % dim)
-        pack_into(buffer, p.srid, *p)
-
-    for value in values:
-
-        # None
-        if value is None:
-            write_bytes(b"\xC0")  # NULL
+        # Float
+        elif t is float:
+            self._write(b"\xC1")
+            self._write(struct_pack(">d", value))
 
         # Boolean
         elif value is True:
-            write_bytes(b"\xC3")
+            self._write(b"\xC3")
         elif value is False:
-            write_bytes(b"\xC2")
+            self._write(b"\xC2")
 
-        # Float (only double precision is supported)
-        elif isinstance(value, float):
-            write_bytes(b"\xC1")
-            write_bytes(struct_pack(">d", value))
-
-        # Integer
-        elif isinstance(value, integer_types):
-            if -0x10 <= value < 0x80:
-                write_bytes(PACKED_UINT_8[value % 0x100])
-            elif -0x80 <= value < -0x10:
-                write_bytes(b"\xC8")
-                write_bytes(PACKED_UINT_8[value % 0x100])
-            elif -0x8000 <= value < 0x8000:
-                write_bytes(b"\xC9")
-                write_bytes(PACKED_UINT_16[value % 0x10000])
-            elif -0x80000000 <= value < 0x80000000:
-                write_bytes(b"\xCA")
-                write_bytes(struct_pack(">i", value))
-            elif INT64_MIN <= value < INT64_MAX:
-                write_bytes(b"\xCB")
-                write_bytes(struct_pack(">q", value))
-            else:
-                raise ValueError("Integer %s out of range" % value)
-
-        # String (from bytes)
-        elif isinstance(value, bytes):
-            write_header(len(value), 0x80, 0xD0, 0xD1, 0xD2)
-            write_bytes(value)
-
-        # String (from unicode)
-        elif isinstance(value, text_type):
-            encoded = value.encode("utf-8")
-            write_header(len(encoded), 0x80, 0xD0, 0xD1, 0xD2)
-            write_bytes(encoded)
+        # None
+        elif value is None:
+            self._write(b"\xC0")  # NULL
 
         # Byte array
-        elif isinstance(value, (bytearray, binary_type)):
-            write_header(len(value), None, 0xCC, 0xCD, 0xCE)
-            write_bytes(bytes(value))
+        elif t is self.bytearray_type:
+            self._pack_bytearray(value)
 
-        # List
-        elif isinstance(value, list) or type(value) is tuple:
-            write_header(len(value), 0x90, 0xD4, 0xD5, 0xD6)
-            pack_into(buffer, *value, version=version)
+        # String (UTF-8)
+        elif t is bytes:
+            self._pack_utf8(value)
 
         # Dictionary
-        elif isinstance(value, dict):
-            write_header(len(value), 0xA0, 0xD8, 0xD9, 0xDA)
-            for key, item in value.items():
-                if isinstance(key, (bytes, text_type)):
-                    pack_into(buffer, key, item, version=version)
-                else:
-                    raise TypeError("Dictionary key {!r} is not a string".format(key))
+        elif t is dict or t is OrderedDict or isinstance(value, self.dict_type):
+            self._pack_dict(value)
 
         # Bolt 2 introduced temporal and spatial types
-        elif version < (2, 0):
+        elif self.version < (2, 0):
             raise TypeError("Values of type %s are not supported "
-                            "by Bolt %s" % (type(value), ".".join(version)))
+                            "by Bolt %s" % (type(value), ".".join(self.version)))
 
         # DateTime
         #
@@ -234,54 +173,191 @@ def pack_into(buffer, *values, **kwargs):
         # to avoid objects being encoded incorrectly.
         #
         elif isinstance(value, (datetime, DateTime)):
-            write_datetime(value)
+            self._pack_datetime(value)
 
         # Date
         elif isinstance(value, (date, Date)):
-            write_bytes(b"\xB1D")
-            pack_into(buffer, value.toordinal() - unix_epoch_date.toordinal())
+            self._write(b"\xB1D")
+            self._pack_integer(value.toordinal() - UNIX_EPOCH_DATE_ORDINAL)
 
         # Time
         elif isinstance(value, (time, Time)):
-            write_time(value)
+            self._pack_time(value)
 
         # TimeDelta
         elif isinstance(value, timedelta):
-            write_bytes(b"\xB4E")
-            pack_into(buffer,
-                      0,                                    # months
-                      value.days,                           # days
-                      value.seconds,                        # seconds
-                      1000 * value.microseconds)            # nanoseconds
+            self._write(b"\xB4E")
+            self._pack_integer(0)                                   # months
+            self._pack_integer(value.days)                          # days
+            self._pack_integer(value.seconds)                       # seconds
+            self._pack_integer(1000 * value.microseconds)           # nanoseconds
 
         # Duration
         elif isinstance(value, Duration):
-            write_bytes(b"\xB4E")
-            pack_into(buffer,
-                      value.months,                         # months
-                      value.days,                           # days
-                      value.seconds,                        # seconds
-                      int(1000000000 * value.subseconds))   # nanoseconds
+            self._write(b"\xB4E")
+            self._pack_integer(value.months)                        # months
+            self._pack_integer(value.days)                          # days
+            self._pack_integer(value.seconds)                       # seconds
+            self._pack_integer(int(1000000000 * value.subseconds))  # nanoseconds
 
         # Point
         elif isinstance(value, Point):
-            write_point(value)
+            self._pack_point(value)
 
         # Other
         else:
             raise TypeError("Values of type %s are not supported" % type(value))
 
+    def _pack_unicode(self, value):
+        # Count the number of chars and handle boundary cases
+        size = len(value)
+        if size == 0:
+            self._write(b"\x80")
+            return
+        elif size >= 0x100000000:
+            raise ValueError("String too large")
+        # Count the number of bytes when encoded as UTF-8
+        self._pack_utf8(value.encode("utf-8"))
 
-def pack(*values, **kwargs):
-    buffer = BytesIO()
-    pack_into(buffer, *values, **kwargs)
-    return buffer.getvalue()
+    def _pack_utf8(self, value):
+        size = len(value)
+        # Write the string header
+        if size < 0x10:
+            self._write(bytearray([0x80 + size]))
+        elif size < 0x100:
+            self._write(STR_S_HEAD[size])
+        elif size < 0x10000:
+            self._write(STR_M_HEAD[size])
+        elif size < 0x100000000:
+            self._write(b"\xD2")
+            self._write(struct_pack(">I", size))
+        else:
+            raise ValueError("String too large")
+        # Write the string content
+        self._write(value)
+
+    def _pack_list(self, value):
+        size = len(value)
+        if size == 0:
+            self._write(b"\x90")
+            return
+        elif size < 0x10:
+            self._write(bytearray([0x90 + size]))
+        elif size < 0x100:
+            self._write(LIST_S_HEAD[size])
+        elif size < 0x10000:
+            self._write(LIST_M_HEAD[size])
+        elif size < 0x100000000:
+            self._write(b"\xD6")
+            self._write(struct_pack(">I", size))
+        else:
+            raise ValueError("List too large")
+        for item in value:
+            self.pack(item)
+
+    def _pack_integer(self, value):
+        if -0x8000 <= value < 0x8000:
+            self._write(INT_DATA[value])
+        elif -0x80000000 <= value < 0x80000000:
+            self._write(b"\xCA")
+            self._write(struct_pack(">i", value))
+        elif INT64_MIN <= value < INT64_MAX:
+            self._write(b"\xCB")
+            self._write(struct_pack(">q", value))
+        else:
+            raise ValueError("Integer %s out of range" % value)
+
+    def _pack_dict(self, value):
+        size = len(value)
+        if size == 0:
+            self._write(b"\xA0")
+        elif size < 0x10:
+            self._write(bytearray([0xA0 + size]))
+        elif size < 0x100:
+            self._write(DICT_S_HEAD[size])
+        elif size < 0x10000:
+            self._write(DICT_M_HEAD[size])
+        elif size < 0x100000000:
+            self._write(b"\xDA")
+            self._write(struct_pack(">I", size))
+        else:
+            raise ValueError("Dictionary too large")
+        for key, item in value.items():
+            if type(key) is not self.text_type:
+                raise TypeError("Dictionary keys must be "
+                                "of type %r" % self.text_type)
+            self._pack_unicode(key)
+            self.pack(item)
+
+    def _pack_bytearray(self, value):
+        size = len(value)
+        if size < 0x100:
+            self._write(BYTES_S_HEAD[size])
+        elif size < 0x10000:
+            self._write(BYTES_M_HEAD[size])
+        elif size < 0x100000000:
+            self._write(b"\xCE")
+            self._write(struct_pack(">I", size))
+        else:
+            raise ValueError("Byte array too large")
+        self._write(value)
+
+    def _pack_time(self, t):
+        try:
+            nanoseconds = int(t.ticks * 1000000000)
+        except AttributeError:
+            nanoseconds = (3600000000000 * t.hour + 60000000000 * t.minute +
+                           1000000000 * t.second + 1000 * t.microsecond)
+        if t.tzinfo:
+            self._write(b"\xB2T")
+            self._pack_integer(nanoseconds)
+            self._pack_integer(t.tzinfo.utcoffset(t).seconds)
+        else:
+            self._write(b"\xB1t")
+            self._pack_integer(nanoseconds)
+
+    def _pack_datetime(self, dt):
+        tz = dt.tzinfo
+        if tz is None:
+            # without time zone
+            local_dt = utc.localize(dt)
+            seconds, nanoseconds = seconds_and_nanoseconds(local_dt)
+            self._write(b"\xB2d")
+            self._pack_integer(seconds)
+            self._pack_integer(nanoseconds)
+        elif hasattr(tz, "zone") and tz.zone:
+            # with named time zone
+            seconds, nanoseconds = seconds_and_nanoseconds(dt)
+            self._write(b"\xB3f")
+            self._pack_integer(seconds)
+            self._pack_integer(nanoseconds)
+            self.pack(tz.zone)
+        else:
+            # with time offset
+            seconds, nanoseconds = seconds_and_nanoseconds(dt)
+            self._write(b"\xB3F")
+            self._pack_integer(seconds)
+            self._pack_integer(nanoseconds)
+            self._pack_integer(tz.utcoffset(dt).seconds)
+
+    def _pack_point(self, p):
+        dim = len(p)
+        self._write(bytearray([0xB1 + dim]))
+        if dim == 2:
+            self._write(b"X")
+        elif dim == 3:
+            self._write(b"Y")
+        else:
+            raise ValueError("Cannot dehydrate Point with %d dimensions" % dim)
+        self._pack_integer(p.srid)
+        for value in p:
+            self.pack(value)
 
 
-class UnpackStream(object):
+class Unpacker(object):
 
     def __init__(self, data, offset=0):
-        if PY2:
+        if six.PY2:
             self._data = bytearray(data)  # FIXME
         else:
             self._data = data
@@ -552,8 +628,15 @@ class UnpackStream(object):
         return r
 
 
+def pack(*values, version=()):
+    packer = Packer(version=version)
+    for value in values:
+        packer.pack(value)
+    return packer.packed()
+
+
 def unpack(data, offset=0):
-    s = UnpackStream(data, offset)
+    s = Unpacker(data, offset)
     while True:
         try:
             yield s.unpack()

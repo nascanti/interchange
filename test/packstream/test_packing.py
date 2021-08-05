@@ -18,7 +18,7 @@
 
 from pytest import mark, raises
 
-from interchange.packstream import pack
+from interchange.packstream import pack, Packer
 
 from .common import (
     STR_S, STR_S_DATA,
@@ -122,7 +122,9 @@ def test_pack_str_l(benchmark):
     assert benchmark(pack, STR_L) == STR_L_DATA
 
 
-def test_pack_str_xl():
+def test_pack_str_xl(monkeypatch):
+    from .common import FakeString
+    monkeypatch.setattr(Packer, "text_type", FakeString)
     with raises(ValueError):
         _ = pack(STR_XL)
 
@@ -143,7 +145,9 @@ def test_pack_bytes_l(benchmark):
     assert benchmark(pack, BYTEARRAY_L) == BYTEARRAY_L_DATA
 
 
-def test_pack_byte_xl():
+def test_pack_byte_xl(monkeypatch):
+    from .common import FakeByteArray
+    monkeypatch.setattr(Packer, "bytearray_type", FakeByteArray)
     with raises(ValueError):
         _ = pack(BYTEARRAY_XL)
 
@@ -168,7 +172,9 @@ def test_pack_list_l():
     assert pack(LIST_L) == LIST_L_DATA
 
 
-def test_pack_list_xl():
+def test_pack_list_xl(monkeypatch):
+    from .common import FakeList
+    monkeypatch.setattr(Packer, "list_type", FakeList)
     with raises(ValueError):
         _ = pack(LIST_XL)
 
@@ -193,7 +199,9 @@ def test_pack_dict_l():
     assert pack(DICT_L) == DICT_L_DATA
 
 
-def test_pack_dict_xl():
+def test_pack_dict_xl(monkeypatch):
+    from .common import FakeDict
+    monkeypatch.setattr(Packer, "dict_type", FakeDict)
     with raises(ValueError):
         _ = pack(DICT_XL)
 
@@ -204,6 +212,6 @@ def test_pack_dict_with_non_string_key():
 
 
 @mark.parametrize("version", [(1, 0), (2, 0)])
-def test_packing_unknown_type(version):
+def test_pack_unknown_type(version):
     with raises(TypeError):
         _ = pack(object(), version=version)

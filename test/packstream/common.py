@@ -17,17 +17,16 @@
 
 
 from collections import OrderedDict
-from io import BytesIO
 
 from six import text_type
 
-from interchange.packstream import pack_into, unpack
+from interchange.packstream import Packer, unpack
 
 
 def pack_and_unpack(value, version=()):
-    buffer = BytesIO()
-    pack_into(buffer, value, version=version)
-    b = buffer.getvalue()
+    packer = Packer(version=version)
+    packer.pack(value)
+    b = packer.packed()
     unpacked = next(unpack(b))
     return b, unpacked
 
@@ -41,6 +40,12 @@ class FakeString(text_type):
     def __init__(self, size):
         super(FakeString, self).__init__()
         self.size = size
+
+    def __len__(self):
+        return self.size
+
+    def __getitem__(self, item):
+        return '\u0000'
 
     def encode(self, encoding="utf-8", errors="strict"):
         return FakeBytes(self.size)
