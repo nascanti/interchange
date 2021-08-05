@@ -103,13 +103,10 @@ class Packer(object):
     list_type = list
     dict_type = dict
 
-    def __init__(self, version=()):
-        self._buffer = BytesIO()
+    def __init__(self, buffer, version=()):
+        self._buffer = buffer
         self._write = self._buffer.write
         self.version = version
-
-    def packed(self):
-        return self._buffer.getvalue()
 
     def pack(self, value):
         t = type(value)
@@ -628,10 +625,11 @@ class Unpacker(object):
 
 
 def pack(*values, **kwargs):
-    packer = Packer(**kwargs)
+    buffer = BytesIO()
+    packer = Packer(buffer, **kwargs)
     for value in values:
         packer.pack(value)
-    return packer.packed()
+    return buffer.getvalue()
 
 
 def unpack(data, offset=0):

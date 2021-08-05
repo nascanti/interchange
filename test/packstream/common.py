@@ -20,13 +20,11 @@ from collections import OrderedDict
 
 from six import text_type
 
-from interchange.packstream import Packer, unpack
+from interchange.packstream import pack, unpack
 
 
 def pack_and_unpack(value, version=()):
-    packer = Packer(version=version)
-    packer.pack(value)
-    b = packer.packed()
+    b = pack(value, version=version)
     unpacked = next(unpack(b))
     return b, unpacked
 
