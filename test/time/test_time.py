@@ -78,12 +78,21 @@ class TimeTestCase(TestCase):
         t = Time.utc_now()
         self.assertIsInstance(t, Time)
 
-    def test_from_native(self):
+    def test_from_native_with_tz(self):
+        native = time(12, 34, 56, 789123, tzinfo=eastern)
+        t = Time.from_native(native)
+        self.assertEqual(t.hour, native.hour)
+        self.assertEqual(t.minute, native.minute)
+        self.assertEqual(t.second, nano_add(native.second, nano_div(native.microsecond, 1000000)))
+        assert t.tzinfo == native.tzinfo
+
+    def test_from_native_without_tz(self):
         native = time(12, 34, 56, 789123)
         t = Time.from_native(native)
         self.assertEqual(t.hour, native.hour)
         self.assertEqual(t.minute, native.minute)
         self.assertEqual(t.second, nano_add(native.second, nano_div(native.microsecond, 1000000)))
+        assert t.tzinfo is None
 
     def test_to_native(self):
         t = Time(12, 34, 56.789123456)

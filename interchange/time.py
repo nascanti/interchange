@@ -1185,7 +1185,7 @@ class DateTime(object):
     def from_native(cls, dt):
         """ Convert from a native Python `datetime.datetime` value.
         """
-        return cls.combine(Date.from_native(dt.date()), Time.from_native(dt.time()))
+        return cls.combine(Date.from_native(dt.date()), Time.from_native(dt.timetz()))
 
     @classmethod
     def from_clock_time(cls, clock_time, epoch):

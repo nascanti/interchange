@@ -208,7 +208,19 @@ def test_localization():
     assert ldt1 == ldt2
 
 
-def test_from_native():
+def test_from_native_with_tz():
+    native = datetime(2018, 10, 1, 12, 34, 56, 789123, tzinfo=eastern)
+    dt = DateTime.from_native(native)
+    assert dt.year == native.year
+    assert dt.month == native.month
+    assert dt.day == native.day
+    assert dt.hour == native.hour
+    assert dt.minute == native.minute
+    assert dt.second, nano_add(native.second, nano_div(native.microsecond == 1000000))
+    assert dt.tzinfo == native.tzinfo
+
+
+def test_from_native_without_tz():
     native = datetime(2018, 10, 1, 12, 34, 56, 789123)
     dt = DateTime.from_native(native)
     assert dt.year == native.year
@@ -217,6 +229,7 @@ def test_from_native():
     assert dt.hour == native.hour
     assert dt.minute == native.minute
     assert dt.second, nano_add(native.second, nano_div(native.microsecond == 1000000))
+    assert dt.tzinfo is None
 
 
 def test_to_native():
