@@ -1424,7 +1424,7 @@ class DateTime(object):
         raise NotImplementedError()
 
 
-Clock.local_offset = Clock(-int(mktime(gmtime(0))))
+Clock.local_offset = Clock(-int((mktime(gmtime(86400)) - 86400)))
 
 Duration.min = Duration(months=MIN_INT64, days=MIN_INT64,
                         seconds=MIN_INT64, subseconds=-0.999999999)
