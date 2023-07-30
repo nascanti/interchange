@@ -16,8 +16,6 @@
 # limitations under the License.
 
 
-from __future__ import absolute_import, division
-
 from codecs import decode
 from collections import OrderedDict
 from datetime import date, time, datetime, timedelta

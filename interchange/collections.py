@@ -16,12 +16,7 @@
 # limitations under the License.
 
 
-from __future__ import absolute_import
-
-try:
-    from collections.abc import Mapping, Set
-except ImportError:
-    from collections import Mapping, Set
+from collections.abc import Mapping, Set
 
 
 class SetView(Set):

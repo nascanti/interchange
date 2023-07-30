@@ -16,8 +16,6 @@
 # limitations under the License.
 
 
-from __future__ import absolute_import, division
-
 from ctypes import CDLL, Structure, c_longlong, c_long, byref
 from datetime import date, time, datetime, timedelta
 from functools import total_ordering
