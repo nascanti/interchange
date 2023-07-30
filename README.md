@@ -1,7 +1,6 @@
 # Interchange
 
 Interchange is a data type and interchange format library.
-It has been primarily developed for the py2neo project.
 
 
 ## `interchange.collections`
