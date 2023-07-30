@@ -693,3 +693,39 @@ class KeyValueList(list):
         else:
             for item in self:
                 yield item
+
+
+class FuzzyDict(dict):
+    """ Dictionary which allows lookups based on a partial key match.
+    """
+
+    def find(self, pattern):
+        """ Extract a sub-dictionary containing all items with a key that
+        matches the given pattern. Matching is based on a sequence of
+        characters which must be found in the key in the same order.
+        """
+        found = [key.lower() for key in self.keys()]
+        for ch in pattern.lower():
+            for i, candidate in enumerate(found):
+                if candidate is None:
+                    continue
+                try:
+                    index = candidate.index(ch)
+                except ValueError:
+                    found[i] = None
+                else:
+                    found[i] = found[i][(index + 1):]
+        return self.__class__({name: profile
+                               for i, (name, profile) in enumerate(self.items())
+                               if found[i] is not None})
+
+    def find_one(self, pattern):
+        found = self.find(pattern)
+        if len(found) == 1:
+            return list(found.items())[0]
+        elif len(found) == 0:
+            raise KeyError(f"No matches for pattern {pattern!r}")
+        else:
+            matches = ", ".join(map(repr, found.keys()))
+            raise KeyError(f"Multiple matches for pattern {pattern!r} ({matches})")
+
